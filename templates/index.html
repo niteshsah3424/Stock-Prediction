@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI Stock Predictor Pro</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+:root{
+  --bg:#0e1117;
+  --card:#161b22;
+  --border:#2a2f3a;
+  --text:#e6edf3;
+  --muted:#8b949e;
+  --green:#00c853;
+  --red:#ff5252;
+  --accent:#4f8cff;
+}
+
+*{
+  box-sizing:border-box;
+  font-family: "Segoe UI", sans-serif;
+}
+
+body{
+  margin:0;
+  background: radial-gradient(circle at 20% 20%, #1f2a48 0%, #0e1117 60%);
+  color:var(--text);
+  display:flex;
+  justify-content:center;
+  padding:30px;
+}
+
+.container{
+  width:1100px;
+  max-width:95vw;
+}
+
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:25px;
+}
+
+.header h1{
+  font-size:28px;
+  margin:0;
+  letter-spacing:1px;
+}
+
+.badge{
+  background:var(--accent);
+  padding:6px 14px;
+  border-radius:20px;
+  font-size:13px;
+  font-weight:600;
+}
+
+.dashboard{
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  gap:25px;
+}
+
+.card{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:20px;
+}
+
+.card h3{
+  margin-top:0;
+  margin-bottom:15px;
+  font-weight:600;
+}
+
+.controls select,
+.controls input{
+  width:100%;
+  padding:10px;
+  margin-bottom:12px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:#0d1117;
+  color:var(--text);
+}
+
+button{
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:10px;
+  font-weight:600;
+  background:var(--accent);
+  color:white;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  opacity:0.85;
+}
+
+.price{
+  font-size:32px;
+  font-weight:700;
+  margin:10px 0;
+}
+
+.meta{
+  font-size:14px;
+  color:var(--muted);
+}
+
+.green{ color:var(--green); }
+.red{ color:var(--red); }
+
+.footer{
+  margin-top:25px;
+  text-align:center;
+  color:var(--muted);
+  font-size:13px;
+}
+
+@media(max-width:900px){
+  .dashboard{
+    grid-template-columns:1fr;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="header">
+    <h1>📈 AI Stock Predictor</h1>
+    <div class="badge">LSTM + Linear Regression</div>
+  </div>
+
+  <div class="dashboard">
+
+    <!-- Chart Section -->
+    <div class="card">
+      <h3>Market History</h3>
+      <canvas id="historyChart" height="110"></canvas>
+    </div>
+
+    <!-- Control Section -->
+    <div class="card">
+      <h3>Prediction Panel</h3>
+
+      <div class="controls">
+        <select id="modelSelect">
+          <option value="lstm">LSTM (Recommended)</option>
+          <option value="lr">Linear Regression</option>
+        </select>
+
+        <input id="historyN" type="number" min="10" max="300" value="60"/>
+
+        <button onclick="predictTomorrow()">Predict Tomorrow</button>
+      </div>
+
+      <div class="price" id="priceText">₹ --</div>
+      <div class="meta" id="metaText">Loading market data...</div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    Built with Flask + Machine Learning | Professional Dashboard UI
+  </div>
+
+</div>
+
+<script>
+let chart;
+
+function formatINR(x){
+  const n = Number(x);
+  if(!Number.isFinite(n)) return "--";
+  return n.toFixed(2);
+}
+
+async function loadHistory(){
+  const n = parseInt(document.getElementById("historyN").value || "60");
+  const res = await fetch(`/api/history?n=${n}`);
+  const data = await res.json();
+
+  if(chart) chart.destroy();
+
+  chart = new Chart(document.getElementById("historyChart"), {
+    type:"line",
+    data:{
+      labels:data.labels,
+      datasets:[{
+        label:"Close Price",
+        data:data.close,
+        borderColor:"#4f8cff",
+        backgroundColor:"rgba(79,140,255,0.15)",
+        fill:true,
+        tension:0.4,
+        pointRadius:0
+      }]
+    },
+    options:{
+      plugins:{ legend:{ display:false }},
+      scales:{
+        x:{ grid:{ display:false }},
+        y:{ grid:{ color:"#222" }}
+      }
+    }
+  });
+
+  document.getElementById("metaText").innerText =
+    `Last Close: ₹ ${formatINR(data.last_close)} | Showing ${data.n} days`;
+}
+
+async function predictTomorrow(){
+  const model = document.getElementById("modelSelect").value;
+
+  const res = await fetch("/api/predict_next",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json"},
+    body:JSON.stringify({model})
+  });
+
+  const data = await res.json();
+  if(data.error){ alert(data.error); return; }
+
+  const priceText = document.getElementById("priceText");
+  const metaText = document.getElementById("metaText");
+
+  const tomorrow = data.predicted_next_close;
+  const change = data.change;
+  const percent = data.change_percent;
+
+  priceText.innerText = `₹ ${formatINR(tomorrow)}`;
+
+  const sign = change >= 0 ? "+" : "";
+  const colorClass = change >= 0 ? "green" : "red";
+
+  metaText.innerHTML =
+    `Last Close: ₹ ${formatINR(data.last_close)}<br>
+     Change: <span class="${colorClass}">
+     ${sign}${formatINR(change)} (${sign}${percent.toFixed(2)}%)
+     </span>`;
+}
+
+document.getElementById("historyN").addEventListener("change", loadHistory);
+
+loadHistory();
+</script>
+
+</body>
+</html>

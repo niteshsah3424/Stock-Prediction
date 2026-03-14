@@ -1,0 +1,8 @@
+{
+  "time_step": 60,
+  "total_rows": 2264,
+  "lr_rmse_scaled": 0.12457836982276094,
+  "lr_rmse_price": 21.86204328828003,
+  "lstm_rmse_scaled": 0.03397691842580446,
+  "lstm_rmse_price": 5.962551018643218
+}
